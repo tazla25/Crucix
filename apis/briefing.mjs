@@ -114,8 +114,8 @@ export async function fullBriefing() {
     () => runSource('Cloudflare-Radar', cloudflareRadar),
   ];
 
-  // Run in batches of 4 to keep RAM usage low on free hosting tiers
-  const BATCH_SIZE = 4;
+    // Run sequentially (1 by 1) to keep RAM strictly under 150MB
+  const BATCH_SIZE = 1;
   const results = [];
 
   for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
