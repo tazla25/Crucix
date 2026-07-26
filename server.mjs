@@ -422,7 +422,7 @@ async function start() {
   ╚══════════════════════════════════════════════╝
   `);
 
-  const server = app.listen(port);
+  const server = app.listen(port, '0.0.0.0');
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -443,11 +443,13 @@ async function start() {
     // Auto-open browser
     // NOTE: On Windows, `start` in PowerShell is an alias for Start-Service, not cmd's start.
     // We must use `cmd /c start ""` to ensure it works in both cmd.exe and PowerShell.
-    const openCmd = process.platform === 'win32' ? 'cmd /c start ""' :
-                    process.platform === 'darwin' ? 'open' : 'xdg-open';
-    exec(`${openCmd} "http://localhost:${port}"`, (err) => {
-      if (err) console.log('[Crucix] Could not auto-open browser:', err.message);
-    });
+    if (process.env.NODE_ENV !== 'production' && !process.env.RENDER) {
+      const openCmd = process.platform === 'win32' ? 'cmd /c start ""' :
+                      process.platform === 'darwin' ? 'open' : 'xdg-open';
+      exec(`${openCmd} "http://localhost:${port}"`, (err) => {
+        if (err) console.log('[Crucix] Could not auto-open browser:', err.message);
+      });
+    }
 
     // Try to load existing data first for instant display (await so dashboard shows immediately)
     try {
@@ -460,12 +462,14 @@ async function start() {
       console.log('[Crucix] No existing data found — first sweep required');
     }
 
-    // Run first sweep (refreshes data in background)
-    console.log('[Crucix] Running initial sweep...');
-    runSweepCycle().catch(err => {
-      console.error('[Crucix] Initial sweep failed:', err.message || err);
-    });
-
+        // Run first sweep in background after 3s delay to ensure Render proxy is ready
+    console.log('[Crucix] Scheduling initial sweep in 3 seconds...');
+    setTimeout(() => {
+      runSweepCycle().catch(err => {
+        console.error('[Crucix] Initial sweep failed:', err.message || err);
+      });
+    }, 3000);
+    
     // Schedule recurring sweeps
     setInterval(runSweepCycle, config.refreshIntervalMinutes * 60 * 1000);
   });
