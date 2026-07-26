@@ -67,55 +67,62 @@ export async function runSource(name, fn, ...args) {
 }
 
 export async function fullBriefing() {
-  console.error('[Crucix] Starting intelligence sweep — 29 sources...');
+  console.error('[Crucix] Starting intelligence sweep — 29 sources (batched mode)...');
   const start = Date.now();
 
-  const allPromises = [
+  // Tasks wrapped in functions so they execute in chunks rather than all at once
+  const tasks = [
     // Tier 1: Core OSINT & Geopolitical
-    runSource('GDELT', gdelt),
-    runSource('OpenSky', opensky),
-    runSource('FIRMS', firms),
-    runSource('Maritime', ships),
-    runSource('Safecast', safecast),
-    runSource('ACLED', acled),
-    runSource('ReliefWeb', reliefweb),
-    runSource('WHO', who),
-    runSource('OFAC', ofac),
-    runSource('OpenSanctions', opensanctions),
-    runSource('ADS-B', adsb),
+    () => runSource('GDELT', gdelt),
+    () => runSource('OpenSky', opensky),
+    () => runSource('FIRMS', firms),
+    () => runSource('Maritime', ships),
+    () => runSource('Safecast', safecast),
+    () => runSource('ACLED', acled),
+    () => runSource('ReliefWeb', reliefweb),
+    () => runSource('WHO', who),
+    () => runSource('OFAC', ofac),
+    () => runSource('OpenSanctions', opensanctions),
+    () => runSource('ADS-B', adsb),
 
     // Tier 2: Economic & Financial
-    runSource('FRED', fred, process.env.FRED_API_KEY),
-    runSource('Treasury', treasury),
-    runSource('BLS', bls, process.env.BLS_API_KEY),
-    runSource('EIA', eia, process.env.EIA_API_KEY),
-    runSource('GSCPI', gscpi),
-    runSource('USAspending', usaspending),
-    runSource('Comtrade', comtrade),
+    () => runSource('FRED', fred, process.env.FRED_API_KEY),
+    () => runSource('Treasury', treasury),
+    () => runSource('BLS', bls, process.env.BLS_API_KEY),
+    () => runSource('EIA', eia, process.env.EIA_API_KEY),
+    () => runSource('GSCPI', gscpi),
+    () => runSource('USAspending', usaspending),
+    () => runSource('Comtrade', comtrade),
 
     // Tier 3: Weather, Environment, Technology, Social
-    runSource('NOAA', noaa),
-    runSource('EPA', epa),
-    runSource('Patents', patents),
-    runSource('Bluesky', bluesky),
-    runSource('Reddit', reddit),
-    runSource('Telegram', telegram),
-    runSource('KiwiSDR', kiwisdr),
+    () => runSource('NOAA', noaa),
+    () => runSource('EPA', epa),
+    () => runSource('Patents', patents),
+    () => runSource('Bluesky', bluesky),
+    () => runSource('Reddit', reddit),
+    () => runSource('Telegram', telegram),
+    () => runSource('KiwiSDR', kiwisdr),
 
     // Tier 4: Space & Satellites
-    runSource('Space', space),
+    () => runSource('Space', space),
 
     // Tier 5: Live Market Data
-    runSource('YFinance', yfinance),
+    () => runSource('YFinance', yfinance),
 
     // Tier 6: Cyber & Infrastructure
-    runSource('CISA-KEV', cisaKev),
-    runSource('Cloudflare-Radar', cloudflareRadar),
+    () => runSource('CISA-KEV', cisaKev),
+    () => runSource('Cloudflare-Radar', cloudflareRadar),
   ];
 
-  // Each runSource has its own 30s timeout, so allSettled will resolve
-  // within ~30s even if APIs hang. Global timeout is a safety net.
-  const results = await Promise.allSettled(allPromises);
+  // Run in batches of 4 to keep RAM usage low on free hosting tiers
+  const BATCH_SIZE = 4;
+  const results = [];
+
+  for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
+    const batch = tasks.slice(i, i + BATCH_SIZE).map(fn => fn());
+    const batchResults = await Promise.allSettled(batch);
+    results.push(...batchResults);
+  }
 
   const sources = results.map(r => r.status === 'fulfilled' ? r.value : { status: 'failed', error: r.reason?.message });
   const totalMs = Date.now() - start;
